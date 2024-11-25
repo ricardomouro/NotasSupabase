@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PWA com Supabase</title>
+    <link rel="manifest" href="manifest.json">
+    <meta name="theme-color" content="#2196f3">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/supabase/0.0.10/umd/supabase.js"></script>
+    <style>
+        .hidden { display: none; }
+        .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+        .note { 
+            padding: 10px; 
+            margin: 10px 0; 
+            background: #f0f0f0; 
+            border-radius: 4px;
+        }
+        .form-group {
+            margin-bottom: 15px;
+        }
+        input, button {
+            padding: 8px;
+            margin: 5px 0;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <!-- Tela de Login -->
+        <div id="authSection">
+            <h2>Login</h2>
+            <div class="form-group">
+                <input type="email" id="email" placeholder="Email">
+            </div>
+            <div class="form-group">
+                <input type="password" id="password" placeholder="Senha">
+            </div>
+            <button onclick="login()">Entrar</button>
+            <button onclick="signup()">Cadastrar</button>
+        </div>
+
+        <!-- Tela Principal -->
+        <div id="mainSection" class="hidden">
+            <h2>Minhas Notas</h2>
+            <div class="form-group">
+                <input type="text" id="notaInput" placeholder="Nova nota">
+                <button onclick="addNota()">Adicionar</button>
+            </div>
+            <button onclick="logout()">Sair</button>
+            <div id="notas"></div>
+        </div>
+    </div>
+
+    <script>
+        // Inicializar Supabase
+        const supabase = supabase.createClient(
+            'SUA_URL_SUPABASE',
+            'SUA_CHAVE_PUBLICA_SUPABASE'
+        );
+
+        // Verificar autenticação ao carregar
+        window.addEventListener('load', async () => {
+            const user = supabase.auth.user();
+            if (user) {
+                showMainSection();
+                loadNotas();
+            }
+        });
+
+        // Funções de autenticação
+        async function login() {
+            const email = document.getElementById('email').value;
+            const password = document.getElementById('password').value;
+            
+            const { user, error } = await supabase.auth.signIn({
+                email,
+                password
+            });
+
+            if (error) {
+                alert('Erro ao fazer login: ' + error.message);
+            } else {
+                showMainSection();
+                loadNotas();
+            }
+        }
+
+        async function signup() {
+            const email = document.getElementById('email').value;
+            const password = document.getElementById('password').value;
+            
+            const { user, error } = await supabase.auth.signUp({
+                email,
+                password
+            });
+
+            if (error) {
+                alert('Erro ao cadastrar: ' + error.message);
+            } else {
+                alert('Verifique seu email para confirmar o cadastro');
+            }
+        }
+
+        async function logout() {
+            await supabase.auth.signOut();
+            showAuthSection();
+        }
+
+        // Funções para manipular notas
+        async function addNota() {
+            const texto = document.getElementById('notaInput').value;
+            const user = supabase.auth.user();
+
+            const { data, error } = await supabase
+                .from('notas')
+                .insert([
+                    { texto, user_id: user.id }
+                ]);
+
+            if (error) {
+                alert('Erro ao salvar nota: ' + error.message);
+            } else {
+                document.getElementById('notaInput').value = '';
+                loadNotas();
+            }
+        }
+
+        async function loadNotas() {
+            const user = supabase.auth.user();
+            
+            const { data, error } = await supabase
+                .from('notas')
+                .select('*')
+                .eq('user_id', user.id)
+                .order('created_at', { ascending: false });
+
+            if (error) {
+                alert('Erro ao carregar notas: ' + error.message);
+                return;
+            }
+
+            const notasDiv = document.getElementById('notas');
+            notasDiv.innerHTML = '';
+            
+            data.forEach(nota => {
+                const noteElement = document.createElement('div');
+                noteElement.className = 'note';
+                noteElement.innerHTML = `
+                    <p>${nota.texto}</p>
+                    <button onclick="deleteNota(${nota.id})">Excluir</button>
+                `;
+                notasDiv.appendChild(noteElement);
+            });
+        }
+
+        async function deleteNota(id) {
+            const { error } = await supabase
+                .from('notas')
+                .delete()
+                .match({ id });
+
+            if (error) {
+                alert('Erro ao deletar nota: ' + error.message);
+            } else {
+                loadNotas();
+            }
+        }
+
+        // Funções auxiliares
+        function showMainSection() {
+            document.getElementById('authSection').classList.add('hidden');
+            document.getElementById('mainSection').classList.remove('hidden');
+        }
+
+        function showAuthSection() {
+            document.getElementById('authSection').classList.remove('hidden');
+            document.getElementById('mainSection').classList.add('hidden');
+        }
+
+        // Service Worker
+        if ('serviceWorker' in navigator) {
+            navigator.serviceWorker.register('sw.js')
+                .then(reg => console.log('Service Worker registrado'))
+                .catch(err => console.log('Erro:', err));
+        }
+    </script>
+</body>
+</html>
